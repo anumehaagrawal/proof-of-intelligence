@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
-	//"math/rand"
+	"math/rand"
 	"net"
 	"os"
 	"strconv"
@@ -123,15 +123,15 @@ func pickWinner() {
 		}
 		// var m map[string]float64
 		// m= make(map[string]float64)
-		var n int
-		n=1
+		// var n int
+		// n=1
 		var maxAcc float64
 		maxAcc =0
 		var lotteryWinner string
-		fmt.Println("lennnnn", len(lotteryPool))
+		algos := [3]string{"euclidean", "manhattan", "cosine"}
+		distances := [2]string{"linear", "kdtree"}
 		for _, miner := range lotteryPool {
-			acc, err := getAccuracy("euclidean","linear", n)
-			n++
+			acc, err := getAccuracy(algos[rand.Intn(len(algos))],distances[rand.Intn(len(distances))], rand.Intn(4) + 1)
 			fmt.Println(miner,acc)
 			if err == nil {
 				if acc>maxAcc {
