@@ -1,3 +1,4 @@
+
 # Code your own Proof of Stake blockchain in Go!
 
 [Read](https://medium.com/@mycoralhealth/code-your-own-proof-of-stake-blockchain-in-go-610cd99aa658) the blog post for this tutorial first!
@@ -26,4 +27,7 @@ Join our [Telegram](https://t.me/joinchat/FX6A7UThIZ1WOUNirDS_Ew) community and 
 
 ![screen](https://user-images.githubusercontent.com/15616604/37950343-061a309c-314d-11e8-84a2-3e5712524fc2.png)
 
+
+=======
+# proof-of-intelligence
 
