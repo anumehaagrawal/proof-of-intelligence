@@ -11,11 +11,11 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
 	"github.com/sjwhitworth/golearn/base"
-	//"github.com/sjwhitworth/golearn/base"
 	"github.com/sjwhitworth/golearn/evaluation"
 	"github.com/sjwhitworth/golearn/knn"
 	"github.com/davecgh/go-spew/spew"
@@ -64,6 +64,8 @@ var announcements = make(chan string)
 
 var mutex = &sync.Mutex{}
 
+type ByAge []Transaction
+type ByGas []Transaction
 // validators keeps track of open validators and balances
 var validators = make(map[string]int)
 
@@ -191,9 +193,11 @@ func pickWinner() {
 		// lotteryWinner := lotteryPool[r.Intn(len(lotteryPool))]
 
 		// add block of winner to blockchain and let all the other nodes know
+		transactionsSelected := getBestTransactions()
 		for _, block := range temp {
 			if block.Validator == lotteryWinner {
 				mutex.Lock()
+				block.Transactions = transactionsSelected
 				Blockchain = append(Blockchain, block)
 				mutex.Unlock()
 				for _ = range validators {
@@ -203,9 +207,58 @@ func pickWinner() {
 			}
 		}
 	}
-
+	mutex.Lock()
+	tempBlocks = []Block{}
+	mutex.Unlock()
 }
+// #########
+func (a ByAge) Len() int  { return len(a) }
+func (a ByAge) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a ByAge) Less(i, j int) bool { return a[i].Age > a[j].Age }
+// #########
 
+// #########
+func (a ByGas) Len() int  { return len(a) }
+func (a ByGas) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a ByGas) Less(i, j int) bool { return a[i].GasPrice > a[j].GasPrice }
+// #########
+
+// func RemoveIndex(s []int, index int) []int {
+//     return append(s[:index], s[index+1:]...)
+// }
+
+func getBestTransactions() []Transaction {
+	var selectT []Transaction
+	sort.Sort(ByAge(transactionPool))
+	i := 0
+	in :=0
+	for i<3 {
+		valid := isTransactionValid(transactionPool[in])
+		if valid == true {
+			selectT = append(selectT, transactionPool[in])
+			i++
+		}
+		in++
+	}
+	i =0
+	in =0
+	transactionPool = transactionPool[3:]
+	// transactionPool = RemoveIndex(transactionPool,0)
+	// transactionPool = RemoveIndex(transactionPool,1)
+	// transactionPool = RemoveIndex(transactionPool,2)
+
+	sort.Sort(ByGas(transactionPool))
+	for i <3 {
+		valid := isTransactionValid(transactionPool[in])
+		if valid == true {
+			selectT = append(selectT, transactionPool[in])
+			i++
+		}
+		in++
+	}
+	transactionPool = transactionPool[3:]
+	return selectT
+}
 func handleConn(conn net.Conn) {
 	defer conn.Close()
 
@@ -287,6 +340,13 @@ func isTransactionValid(transaction Transaction) bool {
 	if transaction.Id <=0  || transaction.Value <=0 || len(transaction.SourceAddr)==0 || len(transaction.DestAddr)==0 || transaction.GasPrice<0 || transaction.Age<0 {
 		return false
 	}
+	/* get miner block also
+	if balance - transaction.Value < 0 {
+		miner.Penalty = miner.Penalty + 1
+		return false
+	}	
+	*/
+	
 	return true
 }
 
@@ -340,9 +400,8 @@ func generateBlock(oldBlock Block, BPM int, address string, transaction []Transa
 
 	return newBlock, nil
 }
-
 func getAccuracy( dist string, algo string, k int) (float64, error) {
-	datasets:= [3]string{"iris.csv","mnist_test.csv","articles.csv"}
+	datasets:= [3]string{"weather.ariff","iris.csv","mnist_train.csv"}
 	num_blocks:= len(Blockchain)
 	difficulty:= 1
 	if num_blocks>10{
@@ -351,8 +410,8 @@ func getAccuracy( dist string, algo string, k int) (float64, error) {
 	if num_blocks>20{
 		difficulty=3
 	}
+	fmt.Println("Dataset:",datasets[difficulty])
 	rawData, err := base.ParseCSVToInstances(datasets[difficulty], true)
-	// rawData, err := base.ParseCSVToInstances("iris.csv", true)
 	if err != nil {
 		panic(err)
 	}
@@ -362,10 +421,6 @@ func getAccuracy( dist string, algo string, k int) (float64, error) {
 
 	//Do a training-test split
 	trainData, testData := base.InstancesTrainTestSplit(rawData, 0.50)
-	print("Printing data")
-	print("Data")
-	print(rawData)
-	print("----------")
 	cls.Fit(trainData)
 
 	//Calculates the Euclidean distance and returns the most popular label
