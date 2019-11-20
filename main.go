@@ -20,6 +20,7 @@ import (
 	"github.com/sjwhitworth/golearn/knn"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/joho/godotenv"
+	"encoding/csv"
 )
 
 // Block represents each 'item' in the blockchain
@@ -30,19 +31,31 @@ type Block struct {
 	Hash      string
 	PrevHash  string
 	Validator string
+	Transactions []Transaction
 }
 
 type Miner struct {
 	HashMiner string
+	wallet int
 	Index int
 	Success int
 	Faults int
+}
+
+type Transaction struct {
+	Id int
+	SourceAddr string
+	DestAddr string
+	Value int
+	GasPrice float64
+	Age int
 }
 
 // Blockchain is a series of validated Blocks
 var Blockchain []Block
 var tempBlocks []Block
 
+var transactionPool []Transaction
 // candidateBlocks handles incoming blocks for validation
 var candidateBlocks = make(chan Block)
 
@@ -60,11 +73,12 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
+	createTransactions()
 	// create genesis block
 	t := time.Now()
 	genesisBlock := Block{}
-	genesisBlock = Block{0, t.String(), 0, calculateBlockHash(genesisBlock), "", ""}
+	var tran []Transaction
+	genesisBlock = Block{0, t.String(), 0, calculateBlockHash(genesisBlock), "", "", tran}
 	spew.Dump(genesisBlock)
 	Blockchain = append(Blockchain, genesisBlock)
 
@@ -100,6 +114,35 @@ func main() {
 		go handleConn(conn)
 	}
 }
+
+func createTransactions(){
+	csvFile, _ := os.Open("transaction.csv")
+    reader := csv.NewReader(bufio.NewReader(csvFile))
+    index := 1
+    for {
+        line, error := reader.Read()
+        if error == io.EOF {
+            break
+        } else if error != nil {
+            log.Fatal(error)
+		}
+		val,_ :=  strconv.Atoi(line[7])
+		age,_ := strconv.Atoi(line[11])
+		gas, _ := strconv.ParseFloat(line[9], 4)
+        transactionPool = append(transactionPool, Transaction{
+            Id: index,
+			SourceAddr: line[5],
+			DestAddr: line[6],
+			Value: val,
+			GasPrice: gas,
+			Age: age,
+			},
+		)
+		index++
+	}
+	fmt.Println(transactionPool)
+}
+
 
 // pickWinner creates a lottery pool of validators and chooses the validator who gets to forge a block to the blockchain
 // by random selecting from the pool, weighted by amount of tokens staked
@@ -177,7 +220,7 @@ func handleConn(conn net.Conn) {
 
 	// allow user to allocate number of tokens to stake
 	// the greater the number of tokens, the greater chance to forging a new block
-	io.WriteString(conn, "Enter token balance:")
+	io.WriteString(conn, "Enter wallet balance:")
 	scanBalance := bufio.NewScanner(conn)
 	for scanBalance.Scan() {
 		balance, err := strconv.Atoi(scanBalance.Text())
@@ -192,7 +235,7 @@ func handleConn(conn net.Conn) {
 		break
 	}
 
-	io.WriteString(conn, "\nEnter a new BPM:")
+	io.WriteString(conn, "\nEnter the transaction amount")
 
 	scanBPM := bufio.NewScanner(conn)
 
@@ -207,13 +250,13 @@ func handleConn(conn net.Conn) {
 					delete(validators, address)
 					conn.Close()
 				}
-
+				var tran []Transaction
 				mutex.Lock()
 				oldLastIndex := Blockchain[len(Blockchain)-1]
 				mutex.Unlock()
 
 				// create newBlock for consideration to be forged
-				newBlock, err := generateBlock(oldLastIndex, bpm, address)
+				newBlock, err := generateBlock(oldLastIndex, bpm, address,tran)
 				if err != nil {
 					log.Println(err)
 					continue
@@ -239,6 +282,14 @@ func handleConn(conn net.Conn) {
 	}
 
 }
+
+func isTransactionValid(transaction Transaction) bool {
+	if transaction.Id <=0  || transaction.Value <=0 || len(transaction.SourceAddr)==0 || len(transaction.DestAddr)==0 || transaction.GasPrice<0 || transaction.Age<0 {
+		return false
+	}
+	return true
+}
+
 
 // isBlockValid makes sure block is valid by checking index
 // and comparing the hash of the previous block
@@ -274,24 +325,34 @@ func calculateBlockHash(block Block) string {
 }
 
 // generateBlock creates a new block using previous block's hash
-func generateBlock(oldBlock Block, BPM int, address string) (Block, error) {
+func generateBlock(oldBlock Block, BPM int, address string, transaction []Transaction) (Block, error) {
 
 	var newBlock Block
 
 	t := time.Now()
-
 	newBlock.Index = oldBlock.Index + 1
 	newBlock.Timestamp = t.String()
 	newBlock.BPM = BPM
 	newBlock.PrevHash = oldBlock.Hash
 	newBlock.Hash = calculateBlockHash(newBlock)
 	newBlock.Validator = address
+	newBlock.Transactions = transaction
 
 	return newBlock, nil
 }
 
 func getAccuracy( dist string, algo string, k int) (float64, error) {
-	rawData, err := base.ParseCSVToInstances("iris.csv", true)
+	datasets:= [3]string{"iris.csv","mnist_test.csv","articles.csv"}
+	num_blocks:= len(Blockchain)
+	difficulty:= 1
+	if num_blocks>10{
+		difficulty= 2
+	}
+	if num_blocks>20{
+		difficulty=3
+	}
+	rawData, err := base.ParseCSVToInstances(datasets[difficulty], true)
+	// rawData, err := base.ParseCSVToInstances("iris.csv", true)
 	if err != nil {
 		panic(err)
 	}
@@ -301,6 +362,10 @@ func getAccuracy( dist string, algo string, k int) (float64, error) {
 
 	//Do a training-test split
 	trainData, testData := base.InstancesTrainTestSplit(rawData, 0.50)
+	print("Printing data")
+	print("Data")
+	print(rawData)
+	print("----------")
 	cls.Fit(trainData)
 
 	//Calculates the Euclidean distance and returns the most popular label
