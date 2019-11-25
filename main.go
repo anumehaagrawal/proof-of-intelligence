@@ -63,18 +63,22 @@ var candidateBlocks = make(chan Block)
 var announcements = make(chan string)
 
 var mutex = &sync.Mutex{}
-
+var blockCount int
 type ByAge []Transaction
 type ByGas []Transaction
+var countBlock map[string]int
+var start time.Time
 // validators keeps track of open validators and balances
 var validators = make(map[string]int)
 
 func main() {
-	
+	blockCount =0
+	countBlock = make(map[string]int)
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatal(err)
 	}
+	start = time.Now()
 	createTransactions()
 	// create genesis block
 	t := time.Now()
@@ -142,7 +146,6 @@ func createTransactions(){
 		)
 		index++
 	}
-	fmt.Println(transactionPool)
 }
 
 
@@ -191,9 +194,17 @@ func pickWinner() {
 		// s := rand.NewSource(time.Now().Unix())
 		// r := rand.New(s)
 		// lotteryWinner := lotteryPool[r.Intn(len(lotteryPool))]
-
+		
 		// add block of winner to blockchain and let all the other nodes know
 		transactionsSelected := getBestTransactions()
+		blockCount++
+		value, ok := countBlock[lotteryWinner]
+		if ok {
+			countBlock[lotteryWinner]  = value + 1
+		} else {
+			countBlock[lotteryWinner] = 1
+		}
+		fmt.Println("The number of blocks mined by each of the validator is ",countBlock)
 		for _, block := range temp {
 			if block.Validator == lotteryWinner {
 				mutex.Lock()
@@ -206,6 +217,10 @@ func pickWinner() {
 				break
 			}
 		}
+		elapsed := time.Since(start)
+		if blockCount%5 == 0{		
+		log.Printf("It took %s to mine the block", elapsed)
+		 }
 	}
 	mutex.Lock()
 	tempBlocks = []Block{}
@@ -232,7 +247,7 @@ func getBestTransactions() []Transaction {
 	sort.Sort(ByAge(transactionPool))
 	i := 0
 	in :=0
-	for i<3 {
+	for i<2 {
 		valid := isTransactionValid(transactionPool[in])
 		if valid == true {
 			selectT = append(selectT, transactionPool[in])
@@ -240,15 +255,16 @@ func getBestTransactions() []Transaction {
 		}
 		in++
 	}
+	transactionPool = transactionPool[in:]
 	i =0
 	in =0
-	transactionPool = transactionPool[3:]
+	
 	// transactionPool = RemoveIndex(transactionPool,0)
 	// transactionPool = RemoveIndex(transactionPool,1)
 	// transactionPool = RemoveIndex(transactionPool,2)
 
 	sort.Sort(ByGas(transactionPool))
-	for i <3 {
+	for i <2 {
 		valid := isTransactionValid(transactionPool[in])
 		if valid == true {
 			selectT = append(selectT, transactionPool[in])
@@ -256,7 +272,7 @@ func getBestTransactions() []Transaction {
 		}
 		in++
 	}
-	transactionPool = transactionPool[3:]
+	transactionPool = transactionPool[in:]
 	return selectT
 }
 func handleConn(conn net.Conn) {
@@ -307,7 +323,7 @@ func handleConn(conn net.Conn) {
 				mutex.Lock()
 				oldLastIndex := Blockchain[len(Blockchain)-1]
 				mutex.Unlock()
-
+				
 				// create newBlock for consideration to be forged
 				newBlock, err := generateBlock(oldLastIndex, bpm, address,tran)
 				if err != nil {
@@ -317,7 +333,8 @@ func handleConn(conn net.Conn) {
 				if isBlockValid(newBlock, oldLastIndex) {
 					candidateBlocks <- newBlock
 				}
-				io.WriteString(conn, "\nEnter a new BPM:")
+				io.WriteString(conn, "\nEnter the transaction amount")
+				
 			}
 		}
 	}()
@@ -401,7 +418,7 @@ func generateBlock(oldBlock Block, BPM int, address string, transaction []Transa
 	return newBlock, nil
 }
 func getAccuracy( dist string, algo string, k int) (float64, error) {
-	datasets:= [3]string{"weather.ariff","iris.csv","mnist_train.csv"}
+	datasets:= [3]string{"iris.csv","articles.csv","mnist_train.csv"}
 	num_blocks:= len(Blockchain)
 	difficulty:= 1
 	if num_blocks>10{
@@ -410,8 +427,8 @@ func getAccuracy( dist string, algo string, k int) (float64, error) {
 	if num_blocks>20{
 		difficulty=3
 	}
-	fmt.Println("Dataset:",datasets[difficulty])
-	rawData, err := base.ParseCSVToInstances(datasets[difficulty], true)
+	fmt.Println("Dataset:",datasets[difficulty-1])
+	rawData, err := base.ParseCSVToInstances(datasets[difficulty-1], true)
 	if err != nil {
 		panic(err)
 	}
